@@ -298,7 +298,7 @@ const iconoFase: Record<string, string> = {
             <div class="w-8 h-8 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center text-white text-sm font-bold">IA</div>
             <div>
               <div class="font-semibold text-slate-900 text-sm">Copiloto INEXPED</div>
-              <div class="text-xs text-slate-500">Claude Sonnet 4.5 · RAG</div>
+              <div class="text-xs text-slate-500">Motor INEXPED IA · RAG normativo</div>
             </div>
           </div>
         </div>

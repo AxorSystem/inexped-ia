@@ -231,7 +231,7 @@ const tipoLabels: Record<string, string> = {
               </div>
             </div>
             <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
-              💡 <strong>Cómo funciona:</strong> Claude leerá el PDF y extraerá nombre, monto, fondo, tipo de adjudicación, municipio y responsable automáticamente.
+              💡 <strong>Cómo funciona:</strong> INEXPED IA leerá el PDF y extraerá nombre, monto, fondo, tipo de adjudicación, municipio y responsable automáticamente.
             </div>
             <button
               :disabled="!pdfFile || pdfProcesando"
@@ -317,7 +317,7 @@ const tipoLabels: Record<string, string> = {
             </div>
             <div v-if="chatProcesando" class="flex justify-start">
               <div class="bg-slate-100 text-slate-500 rounded-2xl px-4 py-2 text-sm">
-                <span class="inline-block animate-pulse">Claude está pensando…</span>
+                <span class="inline-block animate-pulse">INEXPED IA está pensando…</span>
               </div>
             </div>
           </div>

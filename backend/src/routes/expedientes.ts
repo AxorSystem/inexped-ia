@@ -10,6 +10,8 @@ import {
   extraerCamposExpediente,
 } from '../ai/extractor.js';
 import { generarDraftsBase } from '../ai/drafts.js';
+import { normalizarModelo, registrarCosto } from '../ai/costos.js';
+import { config } from '../config.js';
 
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (
@@ -178,9 +180,18 @@ router.post('/desde-pdf', uploadMemory.single('file'), async (req: any, res) => 
       return res.status(400).json({ error: 'no se pudo extraer texto legible del PDF' });
     }
 
-    // 2. Extrae los campos con Claude
+    // 2. Extrae los campos con IA
     const fondos = await cargarCatalogoFondos();
-    const { campos, costUsd } = await extraerCamposExpediente(texto, fondos);
+    const { campos, costUsd, usage } = await extraerCamposExpediente(texto, fondos);
+    await registrarCosto({
+      accion: 'extraer_pdf',
+      modelo: normalizarModelo(config.ai.chatModel),
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      costUsd,
+      actor: req.user?.name ?? 'anon',
+      meta: { filename: req.file.originalname, confianza: campos.confianza },
+    });
 
     // 3. Si no hay datos mínimos, devuelve la extracción para confirmación manual
     if (!campos.nombre || !campos.monto || !campos.fondo_codigo) {
@@ -228,7 +239,16 @@ router.post('/desde-chat', async (req: any, res) => {
   const historial = Array.isArray(req.body?.historial) ? req.body.historial : [];
   try {
     const fondos = await cargarCatalogoFondos();
-    const { mensaje, listo, campos, costUsd } = await conversarParaCrear(historial, fondos);
+    const { mensaje, listo, campos, costUsd, usage } = await conversarParaCrear(historial, fondos);
+    await registrarCosto({
+      accion: 'extraer_chat',
+      modelo: normalizarModelo(config.ai.chatModel),
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      costUsd,
+      actor: req.user?.name ?? 'anon',
+      meta: { turnos: historial.length, listo },
+    });
 
     if (!listo || !campos || !campos.nombre || !campos.monto || !campos.fondo_codigo) {
       return res.json({ creado: false, mensaje, costUsd });

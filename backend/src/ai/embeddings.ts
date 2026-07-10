@@ -16,29 +16,49 @@ export function chunkText(text: string, chunkSize = 3200, overlap = 200): string
   return chunks;
 }
 
-/** Genera embeddings para un array de textos. */
-export async function embed(texts: string[]): Promise<number[][]> {
-  if (!texts.length) return [];
+export interface EmbedResult {
+  vectors: number[][];
+  tokens: number;
+  costUsd: number;
+}
+
+// Precio text-embedding-3-small: $0.02 por 1M tokens
+const EMBED_PRICE_PER_M = 0.02;
+
+/** Genera embeddings para un array de textos y devuelve tokens/costo. */
+export async function embed(texts: string[]): Promise<EmbedResult> {
+  if (!texts.length) return { vectors: [], tokens: 0, costUsd: 0 };
   const resp = await openai.embeddings.create({
     model: config.ai.embeddingModel,
     input: texts,
   });
-  return resp.data.map((d) => d.embedding);
+  const tokens = resp.usage?.total_tokens ?? 0;
+  return {
+    vectors: resp.data.map((d) => d.embedding),
+    tokens,
+    costUsd: (tokens * EMBED_PRICE_PER_M) / 1_000_000,
+  };
 }
 
-/** Guarda los chunks + embeddings de un documento en SQL Server. */
-export async function indexarDocumento(documentoId: number, texto: string): Promise<number> {
+/**
+ * Guarda los chunks + embeddings de un documento en SQL Server.
+ * Retorna número de chunks, tokens usados y costo.
+ */
+export async function indexarDocumento(
+  documentoId: number,
+  texto: string,
+): Promise<{ chunks: number; tokens: number; costUsd: number }> {
   const chunks = chunkText(texto);
-  if (!chunks.length) return 0;
-  const vectors = await embed(chunks);
+  if (!chunks.length) return { chunks: 0, tokens: 0, costUsd: 0 };
+  const r = await embed(chunks);
   for (let i = 0; i < chunks.length; i++) {
     await query(
       `INSERT INTO dbo.embeddings (documento_id, chunk_idx, chunk_text, vector_json)
        VALUES (@d, @i, @c, @v)`,
-      { d: documentoId, i, c: chunks[i], v: JSON.stringify(vectors[i]) }
+      { d: documentoId, i, c: chunks[i], v: JSON.stringify(r.vectors[i]) },
     );
   }
-  return chunks.length;
+  return { chunks: chunks.length, tokens: r.tokens, costUsd: r.costUsd };
 }
 
 /** Distancia coseno entre dos vectores. Retorna [0,2] (0=idénticos). */
@@ -63,7 +83,8 @@ export async function buscarChunks(expedienteId: number, queryText: string, topK
   filename: string;
   score: number;
 }>> {
-  const [qVec] = await embed([queryText]);
+  const embR = await embed([queryText]);
+  const qVec = embR.vectors[0];
   const r = await query(
     `SELECT e.chunk_text, e.documento_id, d.filename, e.vector_json
        FROM dbo.embeddings e

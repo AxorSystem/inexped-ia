@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { query } from '../db.js';
 import { clasificarDocumento } from '../ai/anthropic.js';
 import { indexarDocumento } from '../ai/embeddings.js';
+import { normalizarModelo, registrarCosto } from '../ai/costos.js';
 import { requireAuth } from './auth.js';
 
 // pdf-parse solo tiene CJS + un script de test que rompe con ESM require; lo cargamos
@@ -67,6 +68,14 @@ router.post('/:expedienteId/upload', upload.single('file'), async (req: any, res
       tipoDoc = clas.tipo_doc;
       metadata = clas.metadata;
       costClasificacion = clas.costUsd;
+      await registrarCosto({
+        expedienteId,
+        accion: 'clasificar_doc',
+        modelo: normalizarModelo(config.ai.classifyModel),
+        costUsd: clas.costUsd,
+        actor: req.user?.name ?? 'anon',
+        meta: { filename, tipo_doc: clas.tipo_doc },
+      });
     } catch (e) {
       console.warn('[docs] clasificar fail:', (e as Error).message);
     }
@@ -97,7 +106,19 @@ router.post('/:expedienteId/upload', upload.single('file'), async (req: any, res
   let chunksIndexados = 0;
   if (extractedText.length > 200) {
     try {
-      chunksIndexados = await indexarDocumento(documentoId, extractedText);
+      const idx = await indexarDocumento(documentoId, extractedText);
+      chunksIndexados = idx.chunks;
+      if (idx.costUsd > 0) {
+        await registrarCosto({
+          expedienteId,
+          accion: 'embeddings',
+          modelo: normalizarModelo(config.ai.embeddingModel),
+          inputTokens: idx.tokens,
+          costUsd: idx.costUsd,
+          actor: req.user?.name ?? 'anon',
+          meta: { documentoId, chunks: idx.chunks, filename },
+        });
+      }
     } catch (e) {
       console.warn('[docs] index fail:', (e as Error).message);
     }
