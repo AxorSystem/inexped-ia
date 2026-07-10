@@ -2,6 +2,9 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '@/lib/api';
+import NuevoExpedienteModal from './NuevoExpedienteModal.vue';
+
+const mostrarNuevo = ref(false);
 
 interface Expediente {
   id: number;
@@ -25,6 +28,12 @@ interface Kpis {
 }
 
 const router = useRouter();
+
+function onCreado(payload: { id: number; folio: string }) {
+  mostrarNuevo.value = false;
+  router.push(`/expedientes/${payload.id}`);
+}
+
 const expedientes = ref<Expediente[]>([]);
 const kpis = ref<Kpis | null>(null);
 const loading = ref(true);
@@ -86,7 +95,17 @@ const estadoLabel: Record<string, string> = {
         <h1 class="text-3xl font-bold text-slate-900">Panel de expedientes</h1>
         <p class="text-slate-600 mt-1">Rendición de cuentas del Gasto Federalizado</p>
       </div>
+      <button
+        @click="mostrarNuevo = true"
+        class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-sm transition"
+      >
+        <span class="text-lg leading-none">+</span>
+        Nuevo expediente
+        <span class="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">IA</span>
+      </button>
     </div>
+
+    <NuevoExpedienteModal v-if="mostrarNuevo" @cerrar="mostrarNuevo = false" @creado="onCreado" />
 
     <!-- KPIs -->
     <div v-if="kpis" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
