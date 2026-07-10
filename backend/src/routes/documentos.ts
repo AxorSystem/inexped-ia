@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { createRequire } from 'node:module';
 import { config } from '../config.js';
 import { query } from '../db.js';
@@ -21,14 +20,20 @@ router.use(requireAuth);
 
 await fs.mkdir(config.storage.uploadsDir, { recursive: true });
 
+const MAX_FILE_SIZE_MB = 25;
 const upload = multer({
   dest: config.storage.uploadsDir,
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: {
+    fileSize: MAX_FILE_SIZE_MB * 1024 * 1024,
+    files: 1,
+    fields: 10,
+  },
 });
 
 /** Sube un documento a un expediente y dispara: OCR → clasificación IA → indexado RAG. */
 router.post('/:expedienteId/upload', upload.single('file'), async (req: any, res) => {
   const expedienteId = Number(req.params.expedienteId);
+  const expedienteTareaId = req.body?.expediente_tarea_id ? Number(req.body.expediente_tarea_id) : null;
   if (!req.file) return res.status(400).json({ error: 'file requerido' });
 
   const filename = req.file.originalname;
@@ -69,11 +74,12 @@ router.post('/:expedienteId/upload', upload.single('file'), async (req: any, res
 
   // 3. Guardar en BD
   const insR = await query(
-    `INSERT INTO dbo.documentos (expediente_id, filename, storage_path, mime_type, size_bytes, tipo_doc, extracted_text, metadata_json, ai_summary, uploaded_by)
+    `INSERT INTO dbo.documentos (expediente_id, expediente_tarea_id, filename, storage_path, mime_type, size_bytes, tipo_doc, extracted_text, metadata_json, ai_summary, uploaded_by)
      OUTPUT INSERTED.id
-     VALUES (@e, @fn, @sp, @m, @s, @t, @et, @md, @sum, @by)`,
+     VALUES (@e, @tarea, @fn, @sp, @m, @s, @t, @et, @md, @sum, @by)`,
     {
       e: expedienteId,
+      tarea: expedienteTareaId,
       fn: filename,
       sp: storagePath,
       m: mime,

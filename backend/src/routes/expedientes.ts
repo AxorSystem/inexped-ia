@@ -46,7 +46,7 @@ router.get('/:id', async (req, res) => {
   );
   if (!r.recordset[0]) return res.status(404).json({ error: 'no encontrado' });
   const docsR = await query(
-    `SELECT id, filename, tipo_doc, metadata_json, ai_summary, uploaded_at
+    `SELECT id, filename, tipo_doc, metadata_json, ai_summary, uploaded_at, expediente_tarea_id
        FROM dbo.documentos WHERE expediente_id = @id ORDER BY uploaded_at DESC`,
     { id }
   );
@@ -55,6 +55,47 @@ router.get('/:id', async (req, res) => {
     metadata: d.metadata_json ? JSON.parse(d.metadata_json) : null,
   }));
   res.json({ ...r.recordset[0], documentos: docs });
+});
+
+/**
+ * Retorna las 6 fases del expediente con sus tareas + documentos + progreso.
+ * Es el endpoint principal de la vista de detalle.
+ */
+router.get('/:id/fases', async (req, res) => {
+  const id = Number(req.params.id);
+  const fasesR = await query('SELECT id, orden, clave, nombre, icono, color FROM dbo.fases ORDER BY orden');
+  const tareasR = await query(
+    `SELECT et.id, et.fase_id, et.orden, et.nombre, et.estado, et.observaciones,
+            et.completada_at, et.completada_por,
+            tc.descripcion, tc.fundamento_legal, tc.obligatorio,
+            (SELECT COUNT(*) FROM dbo.documentos d WHERE d.expediente_tarea_id = et.id) AS docs_count
+       FROM dbo.expediente_tareas et
+       JOIN dbo.tareas_catalogo tc ON tc.id = et.tarea_catalogo_id
+      WHERE et.expediente_id = @id
+      ORDER BY et.fase_id, et.orden`,
+    { id }
+  );
+
+  const tareasPorFase = new Map<number, any[]>();
+  for (const t of tareasR.recordset) {
+    if (!tareasPorFase.has(t.fase_id)) tareasPorFase.set(t.fase_id, []);
+    tareasPorFase.get(t.fase_id)!.push(t);
+  }
+
+  const fases = fasesR.recordset.map((f: any) => {
+    const tareas = tareasPorFase.get(f.id) ?? [];
+    const total = tareas.length;
+    const completadas = tareas.filter((t) => t.estado === 'completada' || t.estado === 'no_aplica').length;
+    return {
+      ...f,
+      tareas,
+      total,
+      completadas,
+      progreso: total === 0 ? 0 : Math.round((completadas / total) * 100),
+    };
+  });
+
+  res.json(fases);
 });
 
 /** Faltantes detectados por reglas + LLM. */
@@ -109,7 +150,7 @@ router.get('/:id/copiloto/historial', async (req, res) => {
   res.json(r.recordset);
 });
 
-/** Avanza el expediente al siguiente estado (con validación de faltantes bloqueantes). */
+/** Avanza el expediente al siguiente estado (solo si NO hay tareas obligatorias pendientes). */
 router.post('/:id/avanzar', async (req, res) => {
   const id = Number(req.params.id);
   const estadoR = await query(`SELECT estado FROM dbo.expedientes WHERE id = @id`, { id });
@@ -119,8 +160,12 @@ router.post('/:id/avanzar', async (req, res) => {
   if (idx === orden.length - 1) return res.status(400).json({ error: 'ya está cerrado' });
 
   const faltantes = await detectarFaltantes(id);
-  if (!faltantes.puede_avanzar) {
-    return res.status(409).json({ error: 'hay faltantes bloqueantes', faltantes: faltantes.faltantes });
+  if (!faltantes.puede_cerrar) {
+    return res.status(409).json({
+      error: 'hay tareas obligatorias pendientes',
+      obligatorias_pendientes: faltantes.obligatorias_pendientes,
+      faltantes: faltantes.faltantes.filter((f) => f.obligatorio),
+    });
   }
   const nuevoEstado = orden[idx + 1];
   await query(

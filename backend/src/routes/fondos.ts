@@ -12,13 +12,4 @@ router.get('/', async (req, res) => {
   res.json(r.recordset);
 });
 
-router.get('/:id/checklist', async (req, res) => {
-  const r = await query(
-    `SELECT id, estado, tipo_doc, descripcion, obligatorio, orden
-       FROM dbo.checklist_items WHERE fondo_id = @id ORDER BY orden`,
-    { id: Number(req.params.id) }
-  );
-  res.json(r.recordset);
-});
-
 export default router;

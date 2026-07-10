@@ -20,12 +20,14 @@ export async function preguntarCopiloto(expedienteId: number, pregunta: string) 
   if (!expR.recordset[0]) throw new Error('Expediente no encontrado');
   const exp = expR.recordset[0];
 
-  // 2. Checklist normativo
-  const checklistR = await query(
-    `SELECT estado, tipo_doc, descripcion, obligatorio
-       FROM dbo.checklist_items
-      WHERE fondo_id = (SELECT fondo_id FROM dbo.expedientes WHERE id = @id)
-      ORDER BY orden`,
+  // 2. Fases con tareas (nueva estructura V2)
+  const fasesR = await query(
+    `SELECT f.clave, f.nombre AS fase_nombre,
+            et.orden, et.nombre AS tarea, et.estado
+       FROM dbo.expediente_tareas et
+       JOIN dbo.fases f ON f.id = et.fase_id
+      WHERE et.expediente_id = @id
+      ORDER BY et.fase_id, et.orden`,
     { id: expedienteId }
   );
 
@@ -68,8 +70,25 @@ Contexto del expediente:
 
 Descripción: ${exp.descripcion ?? 'sin descripción'}
 
-Checklist normativo aplicable:
-${checklistR.recordset.map((c: any) => `  [${c.estado}] ${c.tipo_doc}: ${c.descripcion}${c.obligatorio ? ' (obligatorio)' : ''}`).join('\n')}
+Estructura del expediente por fase (6 fases estándar de obra pública):
+${(() => {
+  const porFase = new Map<string, Array<{orden:number; tarea:string; estado:string; fase_nombre:string}>>();
+  for (const r of fasesR.recordset as Array<any>) {
+    if (!porFase.has(r.clave)) porFase.set(r.clave, []);
+    porFase.get(r.clave)!.push(r);
+  }
+  return [...porFase.entries()]
+    .map(([clave, tareas]) => {
+      const done = tareas.filter((t) => t.estado === 'completada' || t.estado === 'no_aplica').length;
+      const total = tareas.length;
+      const header = `Fase ${clave} · ${tareas[0].fase_nombre} — ${done}/${total} completadas`;
+      const lines = tareas
+        .map((t) => `    ${clave}.${t.orden} [${t.estado}] ${t.tarea}`)
+        .join('\n');
+      return `${header}\n${lines}`;
+    })
+    .join('\n\n');
+})()}
 
 Documentos actualmente en el expediente:
 ${docsR.recordset.map((d: any) => `  - ${d.filename} (${d.tipo_doc ?? 'sin clasificar'})`).join('\n') || '  (ninguno todavía)'}
@@ -94,12 +113,12 @@ ${docsR.recordset.map((d: any) => `  - ${d.filename} (${d.tipo_doc ?? 'sin clasi
 }
 
 /**
- * Detecta faltantes en un expediente comparando docs subidos vs checklist.
- * Enriquece la salida con análisis de LLM sobre coherencia.
+ * Detecta tareas pendientes (obligatorias, aún no completadas) por fase.
+ * Se usa para el resumen ejecutivo y para bloquear el "avanzar" del expediente.
  */
 export async function detectarFaltantes(expedienteId: number) {
   const expR = await query(
-    `SELECT e.folio, e.nombre, e.estado, e.fondo_id, f.codigo AS fondo_codigo
+    `SELECT e.folio, e.nombre, e.estado, f.codigo AS fondo_codigo
        FROM dbo.expedientes e JOIN dbo.fondos f ON f.id = e.fondo_id
       WHERE e.id = @id`,
     { id: expedienteId }
@@ -107,45 +126,46 @@ export async function detectarFaltantes(expedienteId: number) {
   if (!expR.recordset[0]) throw new Error('Expediente no encontrado');
   const exp = expR.recordset[0];
 
-  const checklistR = await query(
-    `SELECT estado, tipo_doc, descripcion, obligatorio, orden
-       FROM dbo.checklist_items WHERE fondo_id = @f ORDER BY orden`,
-    { f: exp.fondo_id }
-  );
-
-  const docsR = await query(
-    `SELECT tipo_doc, COUNT(*) AS n FROM dbo.documentos
-      WHERE expediente_id = @id AND tipo_doc IS NOT NULL
-      GROUP BY tipo_doc`,
+  const pendientesR = await query(
+    `SELECT et.id, et.orden, et.nombre, et.estado,
+            fa.clave AS fase_clave, fa.nombre AS fase_nombre, fa.orden AS fase_orden,
+            tc.obligatorio
+       FROM dbo.expediente_tareas et
+       JOIN dbo.fases fa ON fa.id = et.fase_id
+       JOIN dbo.tareas_catalogo tc ON tc.id = et.tarea_catalogo_id
+      WHERE et.expediente_id = @id
+        AND et.estado IN ('pendiente', 'observada')
+      ORDER BY fa.orden, et.orden`,
     { id: expedienteId }
   );
 
-  const conteo = new Map<string, number>();
-  for (const r of docsR.recordset) conteo.set(r.tipo_doc, r.n);
+  const faltantes = pendientesR.recordset.map((r: any) => ({
+    id: r.id,
+    fase: r.fase_clave,
+    fase_nombre: r.fase_nombre,
+    orden: r.orden,
+    nombre: r.nombre,
+    estado: r.estado,
+    obligatorio: !!r.obligatorio,
+  }));
 
-  const estados = ['planeacion', 'autorizado', 'ejecucion', 'cierre'];
-  const idxEstado = estados.indexOf(exp.estado);
-
-  const faltantes: Array<{ tipo: string; descripcion: string; estado: string; bloqueante: boolean }> = [];
-  for (const item of checklistR.recordset) {
-    // Solo consideramos ítems del estado actual y anteriores
-    const idxItem = estados.indexOf(item.estado);
-    if (idxItem > idxEstado) continue;
-    const tiene = (conteo.get(item.tipo_doc) ?? 0) > 0;
-    if (!tiene && item.obligatorio) {
-      faltantes.push({
-        tipo: item.tipo_doc,
-        descripcion: item.descripcion,
-        estado: item.estado,
-        bloqueante: idxItem === idxEstado,
-      });
-    }
-  }
+  const totalR = await query(
+    `SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN estado IN ('completada','no_aplica') THEN 1 ELSE 0 END) AS done
+       FROM dbo.expediente_tareas WHERE expediente_id = @id`,
+    { id: expedienteId }
+  );
+  const total = totalR.recordset[0].total ?? 0;
+  const done = totalR.recordset[0].done ?? 0;
 
   return {
     expediente: { folio: exp.folio, nombre: exp.nombre, estado: exp.estado, fondo: exp.fondo_codigo },
-    total_documentos: [...conteo.values()].reduce((a, b) => a + b, 0),
+    progreso_pct: total === 0 ? 0 : Math.round((done / total) * 100),
+    total_tareas: total,
+    completadas: done,
     faltantes,
-    puede_avanzar: faltantes.filter((f) => f.bloqueante).length === 0,
+    obligatorias_pendientes: faltantes.filter((f) => f.obligatorio).length,
+    puede_cerrar: faltantes.filter((f) => f.obligatorio).length === 0,
   };
 }
