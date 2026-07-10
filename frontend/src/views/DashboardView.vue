@@ -95,14 +95,24 @@ const estadoLabel: Record<string, string> = {
         <h1 class="text-3xl font-bold text-slate-900">Panel de expedientes</h1>
         <p class="text-slate-600 mt-1">Rendición de cuentas del Gasto Federalizado</p>
       </div>
-      <button
-        @click="mostrarNuevo = true"
-        class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-sm transition"
-      >
-        <span class="text-lg leading-none">+</span>
-        Nuevo expediente
-        <span class="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">IA</span>
-      </button>
+      <div class="flex items-center gap-2">
+        <router-link
+          to="/costos"
+          class="inline-flex items-center gap-1 px-3 py-2.5 text-xs text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+          title="Costos internos (owner)"
+        >
+          <span>$</span>
+          <span class="hidden md:inline">Costos IA</span>
+        </router-link>
+        <button
+          @click="mostrarNuevo = true"
+          class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg shadow-sm transition"
+        >
+          <span class="text-lg leading-none">+</span>
+          Nuevo expediente
+          <span class="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">IA</span>
+        </button>
+      </div>
     </div>
 
     <NuevoExpedienteModal v-if="mostrarNuevo" @cerrar="mostrarNuevo = false" @creado="onCreado" />

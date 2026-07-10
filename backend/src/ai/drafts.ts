@@ -4,6 +4,7 @@ import { chat } from './anthropic.js';
 import { config } from '../config.js';
 import { query } from '../db.js';
 import { indexarDocumento } from './embeddings.js';
+import { normalizarModelo, registrarCosto } from './costos.js';
 
 /**
  * Datos mínimos que necesita cada draft.
@@ -213,9 +214,31 @@ export async function generarDraftsBase(expedienteId: number) {
       );
       const documentoId = insR.recordset[0].id;
 
+      await registrarCosto({
+        expedienteId,
+        accion: 'generar_draft',
+        modelo: normalizarModelo(config.ai.chatModel),
+        inputTokens: r.usage.input_tokens,
+        outputTokens: r.usage.output_tokens,
+        costUsd: r.costUsd,
+        actor: 'INEXPED IA',
+        meta: { slug: d.slug, titulo: d.titulo, documentoId },
+      });
+
       // Indexa para que el copiloto pueda citarlo
       try {
-        await indexarDocumento(documentoId, r.text);
+        const idx = await indexarDocumento(documentoId, r.text);
+        if (idx.costUsd > 0) {
+          await registrarCosto({
+            expedienteId,
+            accion: 'embeddings',
+            modelo: normalizarModelo(config.ai.embeddingModel),
+            inputTokens: idx.tokens,
+            costUsd: idx.costUsd,
+            actor: 'INEXPED IA',
+            meta: { documentoId, slug: d.slug, chunks: idx.chunks },
+          });
+        }
       } catch (e) {
         console.warn('[drafts] index fail:', (e as Error).message);
       }

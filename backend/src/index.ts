@@ -8,6 +8,7 @@ import documentos from './routes/documentos.js';
 import fondos from './routes/fondos.js';
 import fases from './routes/fases.js';
 import tareas from './routes/tareas.js';
+import admin from './routes/admin.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -25,6 +26,7 @@ app.use('/api/documentos', documentos);
 app.use('/api/fondos', fondos);
 app.use('/api/fases', fases);
 app.use('/api/tareas', tareas);
+app.use('/api/admin', admin);
 
 app.use((req, res) => res.status(404).json({ error: 'ruta no encontrada' }));
 app.use((err: any, req: any, res: any, _next: any) => {

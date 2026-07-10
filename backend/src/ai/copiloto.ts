@@ -1,6 +1,8 @@
 import { chat } from './anthropic.js';
 import { buscarChunks } from './embeddings.js';
 import { query } from '../db.js';
+import { normalizarModelo, registrarCosto } from './costos.js';
+import { config } from '../config.js';
 
 /**
  * Copiloto RAG sobre un expediente.
@@ -102,6 +104,16 @@ ${docsR.recordset.map((d: any) => `  - ${d.filename} (${d.tipo_doc ?? 'sin clasi
     system,
     messages: [{ role: 'user', content: userContent }],
     maxTokens: 1200,
+  });
+
+  await registrarCosto({
+    expedienteId,
+    accion: 'copiloto',
+    modelo: normalizarModelo(config.ai.chatModel),
+    inputTokens: result.usage.input_tokens,
+    outputTokens: result.usage.output_tokens,
+    costUsd: result.costUsd,
+    meta: { pregunta: pregunta.slice(0, 200), chunks: chunks.length },
   });
 
   return {
