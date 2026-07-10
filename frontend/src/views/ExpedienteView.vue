@@ -54,6 +54,60 @@ const cargandoChat = ref(false);
 const cargandoUpload = ref(false);
 const chatContainer = useTemplateRef<HTMLDivElement>('chatContainer');
 
+// ── Cédula ASF ────────────────────────
+const cedula = ref<{ documentoId: number; filename: string; contenido: string;
+  cumplimientoPct: number; tareasTotal: number; tareasCompletadas: number;
+  docsAnexos: number; costUsd: number } | null>(null);
+const cedulaGenerando = ref(false);
+const cedulaError = ref('');
+const mostrarCedula = ref(false);
+
+async function verCedulaExistente() {
+  // Busca si ya hay una Cédula generada previa (tipo_doc='cedula_asf')
+  if (!expediente.value) return;
+  const docs = await api.get(`/expedientes/${expediente.value.id}`);
+  const cedulaDoc = docs.data.documentos?.find((d: any) => d.tipo_doc === 'cedula_asf');
+  if (!cedulaDoc) return;
+  const r = await api.get(`/expedientes/${expediente.value.id}/documentos/${cedulaDoc.id}/contenido`);
+  cedula.value = {
+    documentoId: cedulaDoc.id,
+    filename: r.data.filename,
+    contenido: r.data.contenido,
+    cumplimientoPct: r.data.metadata?.cumplimiento_pct ?? 0,
+    tareasTotal: r.data.metadata?.tareas_total ?? 0,
+    tareasCompletadas: r.data.metadata?.tareas_completadas ?? 0,
+    docsAnexos: r.data.metadata?.docs_anexos ?? 0,
+    costUsd: r.data.metadata?.costUsd ?? 0,
+  };
+}
+
+async function generarCedula() {
+  if (!expediente.value) return;
+  cedulaGenerando.value = true;
+  cedulaError.value = '';
+  try {
+    const r = await api.post(`/expedientes/${expediente.value.id}/cedula`);
+    cedula.value = r.data;
+    mostrarCedula.value = true;
+    await cargar();
+  } catch (e: any) {
+    cedulaError.value = e.response?.data?.error ?? e.message;
+  } finally {
+    cedulaGenerando.value = false;
+  }
+}
+
+function descargarCedula() {
+  if (!cedula.value) return;
+  const blob = new Blob([cedula.value.contenido], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = cedula.value.filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 async function cargar() {
   const [expR, fasesR, histR] = await Promise.all([
     api.get(`/expedientes/${props.id}`),
@@ -67,6 +121,10 @@ async function cargar() {
   if (faseAbierta.value === null) {
     const primeraIncompleta = fases.value.find((f) => f.progreso < 100);
     faseAbierta.value = (primeraIncompleta ?? fases.value[0])?.id ?? null;
+  }
+  // Si está cerrado, intenta recuperar la Cédula ya generada
+  if (expediente.value?.estado === 'cerrado') {
+    verCedulaExistente().catch(() => {});
   }
   await nextTick();
   scrollChat();
@@ -219,6 +277,82 @@ const iconoFase: Record<string, string> = {
           <div class="text-2xl font-bold text-slate-900">{{ fmtMoney(expediente.monto) }}</div>
           <div class="text-xs text-slate-500 mt-1">{{ expediente.fondo_codigo }} · {{ expediente.fondo_nombre }}</div>
         </div>
+      </div>
+    </div>
+
+    <!-- ==================== RESULTADO FINAL (solo si cerrado) ==================== -->
+    <div v-if="expediente.estado === 'cerrado'" class="mb-6 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white overflow-hidden shadow-sm">
+      <div class="p-6 border-b border-emerald-100 flex flex-col md:flex-row items-start md:items-center gap-4">
+        <div class="w-14 h-14 rounded-2xl bg-emerald-500 flex items-center justify-center text-white text-3xl shrink-0">✓</div>
+        <div class="flex-1">
+          <div class="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Resultado final</div>
+          <h2 class="text-2xl font-bold text-slate-900">Expediente cerrado y listo para auditoría ASF</h2>
+          <p class="text-sm text-slate-600 mt-1">Todas las tareas de las 6 fases fueron cumplidas y documentadas conforme al marco normativo GASFED.</p>
+        </div>
+      </div>
+
+      <!-- Métricas -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-0 border-b border-emerald-100 divide-x divide-emerald-100">
+        <div class="p-4 text-center">
+          <div class="text-xs text-slate-500 uppercase tracking-wider">Cumplimiento</div>
+          <div class="text-2xl font-bold text-emerald-700 mt-1">{{ progresoTotal }}%</div>
+        </div>
+        <div class="p-4 text-center">
+          <div class="text-xs text-slate-500 uppercase tracking-wider">Tareas cumplidas</div>
+          <div class="text-2xl font-bold text-slate-800 mt-1">
+            {{ fases.reduce((s, f) => s + f.completadas, 0) }}/{{ fases.reduce((s, f) => s + f.total, 0) }}
+          </div>
+        </div>
+        <div class="p-4 text-center">
+          <div class="text-xs text-slate-500 uppercase tracking-wider">Documentos anexos</div>
+          <div class="text-2xl font-bold text-slate-800 mt-1">{{ cedula?.docsAnexos ?? '—' }}</div>
+        </div>
+        <div class="p-4 text-center">
+          <div class="text-xs text-slate-500 uppercase tracking-wider">Monto ejercido</div>
+          <div class="text-2xl font-bold text-slate-800 mt-1">{{ fmtMoney(expediente.monto) }}</div>
+        </div>
+      </div>
+
+      <!-- CTA Cédula ASF -->
+      <div class="p-6">
+        <div v-if="!cedula" class="flex flex-col md:flex-row items-center gap-4">
+          <div class="flex-1">
+            <div class="text-sm font-semibold text-slate-800 mb-1">🏛 Cédula Consolidada de Rendición de Cuentas ASF</div>
+            <div class="text-sm text-slate-600">Documento único que se entrega al auditor. INEXPED IA consolida las 6 fases y los {{ fases.reduce((s, f) => s + f.total, 0) }} elementos del expediente en un solo archivo formal, con fundamentos legales citados.</div>
+          </div>
+          <button
+            @click="generarCedula"
+            :disabled="cedulaGenerando"
+            class="whitespace-nowrap px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-semibold rounded-lg shadow-sm transition"
+          >
+            {{ cedulaGenerando ? 'Generando…' : 'Generar Cédula ASF' }}
+          </button>
+        </div>
+
+        <div v-else>
+          <div class="flex flex-col md:flex-row items-start md:items-center gap-4 mb-4">
+            <div class="flex-1">
+              <div class="text-sm font-semibold text-emerald-800 mb-1">✓ Cédula Consolidada generada</div>
+              <div class="text-xs text-slate-500 font-mono">{{ cedula.filename }}</div>
+            </div>
+            <div class="flex gap-2">
+              <button @click="mostrarCedula = !mostrarCedula" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-sm rounded-lg">
+                {{ mostrarCedula ? 'Ocultar' : 'Ver' }}
+              </button>
+              <button @click="descargarCedula" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg">
+                Descargar (.md)
+              </button>
+              <button @click="generarCedula" :disabled="cedulaGenerando" class="px-4 py-2 border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-sm rounded-lg">
+                Regenerar
+              </button>
+            </div>
+          </div>
+
+          <!-- Contenido inline de la cédula -->
+          <div v-if="mostrarCedula" class="mt-4 p-6 bg-white border border-slate-200 rounded-lg max-h-[70vh] overflow-y-auto whitespace-pre-wrap text-sm text-slate-800 leading-relaxed font-serif">{{ cedula.contenido }}</div>
+        </div>
+
+        <div v-if="cedulaError" class="mt-3 bg-rose-50 border border-rose-200 rounded-lg p-3 text-sm text-rose-800">{{ cedulaError }}</div>
       </div>
     </div>
 

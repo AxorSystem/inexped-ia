@@ -10,6 +10,7 @@ import {
   extraerCamposExpediente,
 } from '../ai/extractor.js';
 import { generarDraftsBase } from '../ai/drafts.js';
+import { generarCedulaAsf } from '../ai/cedula.js';
 import { normalizarModelo, registrarCosto } from '../ai/costos.js';
 import { config } from '../config.js';
 
@@ -434,6 +435,45 @@ router.post('/:id/avanzar', async (req, res) => {
     { e: nuevoEstado, id }
   );
   res.json({ estado_anterior: estadoR.recordset[0].estado, estado_nuevo: nuevoEstado });
+});
+
+/**
+ * Genera la Cédula Consolidada de Rendición de Cuentas ASF.
+ * Es el "resultado final" del expediente: documento único que el municipio
+ * entrega al auditor ASF, con base en los 30+ docs y las 6 fases.
+ * Requiere que el expediente esté en estado 'cerrado' (o al menos 'cierre').
+ */
+router.post('/:id/cedula', async (req: any, res) => {
+  const id = Number(req.params.id);
+  try {
+    const result = await generarCedulaAsf(id, req.user?.name ?? 'anon');
+    res.json(result);
+  } catch (e: any) {
+    console.error('[cedula]', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * Retorna el contenido en texto/markdown de un documento del expediente.
+ * Se usa para mostrar en línea la Cédula ASF y los borradores IA.
+ */
+router.get('/:id/documentos/:docId/contenido', async (req, res) => {
+  const r = await query(
+    `SELECT filename, extracted_text, tipo_doc, ai_summary, metadata_json
+       FROM dbo.documentos
+      WHERE id = @doc AND expediente_id = @exp`,
+    { doc: Number(req.params.docId), exp: Number(req.params.id) },
+  );
+  if (!r.recordset[0]) return res.status(404).json({ error: 'no encontrado' });
+  const d = r.recordset[0];
+  res.json({
+    filename: d.filename,
+    tipo_doc: d.tipo_doc,
+    ai_summary: d.ai_summary,
+    contenido: d.extracted_text,
+    metadata: d.metadata_json ? JSON.parse(d.metadata_json) : null,
+  });
 });
 
 export default router;
