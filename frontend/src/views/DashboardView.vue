@@ -92,8 +92,9 @@ const estadoLabel: Record<string, string> = {
   <div class="max-w-7xl mx-auto px-6 py-8">
     <div class="flex items-center justify-between mb-8">
       <div>
+        <div class="text-xs font-bold text-amber-700 tracking-widest uppercase mb-1">Gerente Virtual · Obra Pública</div>
         <h1 class="text-3xl font-bold text-slate-900">Panel de expedientes</h1>
-        <p class="text-slate-600 mt-1">Rendición de cuentas del Gasto Federalizado</p>
+        <p class="text-slate-600 mt-1">Ciclo integral de gestión de obra pública · Cumplimiento GASFED</p>
       </div>
       <div class="flex items-center gap-2">
         <router-link
