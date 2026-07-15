@@ -326,31 +326,55 @@ router.get('/:id', async (req, res) => {
 router.get('/:id/fases', async (req, res) => {
   const id = Number(req.params.id);
   const fasesR = await query('SELECT id, orden, clave, nombre, icono, color FROM dbo.fases ORDER BY orden');
+  const pasosR = await query(
+    'SELECT id, fase_id, orden_global, orden_en_fase, nombre, descripcion, icono FROM dbo.pasos ORDER BY orden_global',
+  );
   const tareasR = await query(
     `SELECT et.id, et.fase_id, et.orden, et.nombre, et.estado, et.observaciones,
             et.completada_at, et.completada_por,
-            tc.descripcion, tc.fundamento_legal, tc.obligatorio,
+            tc.descripcion, tc.fundamento_legal, tc.obligatorio, tc.paso_id, tc.etapa_asf,
             (SELECT COUNT(*) FROM dbo.documentos d WHERE d.expediente_tarea_id = et.id) AS docs_count
        FROM dbo.expediente_tareas et
        JOIN dbo.tareas_catalogo tc ON tc.id = et.tarea_catalogo_id
       WHERE et.expediente_id = @id
       ORDER BY et.fase_id, et.orden`,
-    { id }
+    { id },
   );
 
-  const tareasPorFase = new Map<number, any[]>();
+  // Agrupa tareas por paso
+  const tareasPorPaso = new Map<number | null, any[]>();
   for (const t of tareasR.recordset) {
-    if (!tareasPorFase.has(t.fase_id)) tareasPorFase.set(t.fase_id, []);
-    tareasPorFase.get(t.fase_id)!.push(t);
+    const k = t.paso_id ?? null;
+    if (!tareasPorPaso.has(k)) tareasPorPaso.set(k, []);
+    tareasPorPaso.get(k)!.push(t);
+  }
+
+  // Agrupa pasos por fase, con tareas anidadas y progreso por paso
+  const pasosPorFase = new Map<number, any[]>();
+  for (const p of pasosR.recordset) {
+    const tareas = tareasPorPaso.get(p.id) ?? [];
+    const total = tareas.length;
+    const completadas = tareas.filter((t: any) => t.estado === 'completada' || t.estado === 'no_aplica').length;
+    const paso = {
+      ...p,
+      tareas,
+      total,
+      completadas,
+      progreso: total === 0 ? 0 : Math.round((completadas / total) * 100),
+    };
+    if (!pasosPorFase.has(p.fase_id)) pasosPorFase.set(p.fase_id, []);
+    pasosPorFase.get(p.fase_id)!.push(paso);
   }
 
   const fases = fasesR.recordset.map((f: any) => {
-    const tareas = tareasPorFase.get(f.id) ?? [];
+    const pasos = pasosPorFase.get(f.id) ?? [];
+    const tareas = pasos.flatMap((p) => p.tareas);
     const total = tareas.length;
-    const completadas = tareas.filter((t) => t.estado === 'completada' || t.estado === 'no_aplica').length;
+    const completadas = tareas.filter((t: any) => t.estado === 'completada' || t.estado === 'no_aplica').length;
     return {
       ...f,
-      tareas,
+      pasos,
+      tareas, // se conserva plano para compat con vistas viejas
       total,
       completadas,
       progreso: total === 0 ? 0 : Math.round((completadas / total) * 100),
