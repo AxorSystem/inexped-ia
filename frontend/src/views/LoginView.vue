@@ -31,21 +31,23 @@ async function submit() {
     <div class="hidden lg:flex flex-col justify-between p-16 bg-gradient-to-br from-brand-900 via-brand-800 to-slate-900 text-white">
       <div>
         <div class="flex items-center gap-4">
-          <div class="w-14 h-14 bg-white/10 backdrop-blur rounded-2xl flex items-center justify-center font-bold text-2xl border border-white/20">
-            IA
+          <div class="w-14 h-14 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center font-bold text-2xl text-slate-900 shadow-lg">
+            🏛
           </div>
           <div>
-            <div class="font-extrabold text-2xl">INEXPED</div>
-            <div class="text-brand-300 tracking-widest text-sm font-semibold">RENDICIÓN CON IA</div>
+            <div class="font-extrabold text-2xl leading-none">
+              GASFED IA
+            </div>
+            <div class="text-amber-400 tracking-widest text-sm font-semibold mt-1">INEXPED</div>
           </div>
         </div>
       </div>
       <div>
         <h1 class="text-4xl font-bold leading-tight mb-6">
-          Rendición de cuentas segura, oportuna y auditable del GASFED.
+          Aseguramiento del Gasto Federalizado con Inteligencia Artificial.
         </h1>
         <p class="text-brand-200 text-lg mb-8 leading-relaxed">
-          Inteligencia Artificial al servicio de la transparencia, el control y la eficiencia en la administración de recursos públicos.
+          Integrado · Inteligente · Transparente · Confiable. Al servicio de municipios que rinden cuentas al 100%.
         </p>
         <div class="grid grid-cols-2 gap-6">
           <div>
@@ -67,7 +69,10 @@ async function submit() {
         </div>
       </div>
       <div class="text-brand-300 text-sm">
-        © 2026 INEXPED IA · Todos los derechos reservados
+        <div class="mb-1">
+          <span class="text-amber-400 font-semibold">Autoría:</span> Ing. Enrique Ocampo Rojas · 25 años de experiencia
+        </div>
+        © 2026 GASFED IA · INEXPED · <a href="https://www.gasfed.mx" class="hover:text-amber-400">gasfed.mx</a>
       </div>
     </div>
 
@@ -75,10 +80,10 @@ async function submit() {
     <div class="flex items-center justify-center p-8 lg:p-16">
       <div class="w-full max-w-md">
         <div class="lg:hidden flex items-center gap-3 mb-8">
-          <div class="w-10 h-10 bg-gradient-to-br from-brand-500 to-brand-800 rounded-lg flex items-center justify-center text-white font-bold">IA</div>
+          <div class="w-10 h-10 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg flex items-center justify-center text-slate-900 font-bold">🏛</div>
           <div>
-            <div class="font-bold text-lg">INEXPED</div>
-            <div class="text-xs text-brand-700 tracking-wider">RENDICIÓN CON IA</div>
+            <div class="font-bold text-lg">GASFED IA · <span class="text-amber-600">INEXPED</span></div>
+            <div class="text-xs text-brand-700 tracking-wider">GASTO FEDERALIZADO</div>
           </div>
         </div>
 

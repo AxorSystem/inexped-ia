@@ -6,6 +6,7 @@ const routes = [
   { path: '/', name: 'dashboard', component: () => import('./views/DashboardView.vue') },
   { path: '/expedientes/:id', name: 'expediente', component: () => import('./views/ExpedienteView.vue'), props: true },
   { path: '/costos', name: 'costos', component: () => import('./views/CostosView.vue') },
+  { path: '/roadmap', name: 'roadmap', component: () => import('./views/RoadmapView.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 
