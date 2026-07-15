@@ -17,6 +17,20 @@ interface Tarea {
   completada_at: string | null;
   completada_por: string | null;
   docs_count: number;
+  paso_id: number | null;
+  etapa_asf: number | null;
+}
+interface Paso {
+  id: number;
+  fase_id: number;
+  orden_global: number;
+  orden_en_fase: number;
+  nombre: string;
+  descripcion: string | null;
+  tareas: Tarea[];
+  total: number;
+  completadas: number;
+  progreso: number;
 }
 interface Fase {
   id: number;
@@ -24,6 +38,7 @@ interface Fase {
   clave: string;
   nombre: string;
   color: string;
+  pasos: Paso[];
   tareas: Tarea[];
   total: number;
   completadas: number;
@@ -398,27 +413,49 @@ const iconoFase: Record<string, string> = {
             </svg>
           </button>
 
-          <!-- Contenido de la fase (tareas) -->
+          <!-- Contenido de la fase (pasos > tareas) -->
           <div v-if="faseAbierta === f.id" class="border-t border-slate-100">
-            <div v-for="t in f.tareas" :key="t.id"
-                 class="flex items-center gap-3 px-4 py-3 hover:bg-brand-50/40 cursor-pointer border-b border-slate-50 last:border-b-0"
-                 @click="verTarea(t)">
-              <!-- Icono estado -->
-              <div class="shrink-0">
-                <div v-if="t.estado === 'completada'" class="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs">✓</div>
-                <div v-else-if="t.estado === 'observada'" class="w-6 h-6 rounded-full bg-yellow-500 flex items-center justify-center text-white text-xs">!</div>
-                <div v-else-if="t.estado === 'no_aplica'" class="w-6 h-6 rounded-full bg-slate-300 flex items-center justify-center text-white text-xs">—</div>
-                <div v-else class="w-6 h-6 rounded-full border-2 border-slate-300"></div>
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-slate-900 truncate">
-                  <span class="text-slate-400 font-mono text-xs mr-1">{{ f.clave }}.{{ t.orden }}</span>
-                  {{ t.nombre }}
+            <div v-for="p in f.pasos" :key="p.id" class="border-b border-slate-100 last:border-b-0">
+              <!-- Cabecera del paso -->
+              <div class="flex items-center gap-3 px-4 py-2.5 bg-slate-50/50">
+                <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                     :style="{ background: f.color }">
+                  {{ p.orden_global }}
                 </div>
-                <div v-if="t.descripcion" class="text-xs text-slate-500 truncate mt-0.5">{{ t.descripcion }}</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-semibold text-slate-800">{{ p.nombre }}</div>
+                  <div v-if="p.descripcion" class="text-xs text-slate-500 truncate">{{ p.descripcion }}</div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <div class="h-1 w-16 bg-slate-200 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full" :style="{ width: p.progreso + '%', backgroundColor: f.color }"></div>
+                  </div>
+                  <span class="text-xs text-slate-500 font-mono whitespace-nowrap">{{ p.completadas }}/{{ p.total }}</span>
+                </div>
               </div>
-              <div v-if="t.docs_count > 0" class="text-xs text-brand-700 font-medium shrink-0">
-                {{ t.docs_count }} 📎
+
+              <!-- Tareas del paso -->
+              <div v-for="t in p.tareas" :key="t.id"
+                   class="flex items-center gap-3 pl-14 pr-4 py-2.5 hover:bg-brand-50/40 cursor-pointer border-t border-slate-50"
+                   @click="verTarea(t)">
+                <div class="shrink-0">
+                  <div v-if="t.estado === 'completada'" class="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-white text-[10px]">✓</div>
+                  <div v-else-if="t.estado === 'observada'" class="w-5 h-5 rounded-full bg-yellow-500 flex items-center justify-center text-white text-[10px]">!</div>
+                  <div v-else-if="t.estado === 'no_aplica'" class="w-5 h-5 rounded-full bg-slate-300 flex items-center justify-center text-white text-[10px]">—</div>
+                  <div v-else class="w-5 h-5 rounded-full border-2 border-slate-300"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm text-slate-800 truncate">{{ t.nombre }}</div>
+                </div>
+                <div v-if="t.etapa_asf" class="text-[10px] text-slate-400 font-mono shrink-0 hidden md:block">
+                  ASF·{{ t.etapa_asf }}
+                </div>
+                <div v-if="t.docs_count > 0" class="text-xs text-brand-700 font-medium shrink-0">
+                  {{ t.docs_count }} 📎
+                </div>
+              </div>
+              <div v-if="p.tareas.length === 0" class="pl-14 pr-4 py-3 text-xs text-slate-400 italic border-t border-slate-50">
+                (sin tareas específicas para este tipo de expediente)
               </div>
             </div>
           </div>
